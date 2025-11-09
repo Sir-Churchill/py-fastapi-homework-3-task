@@ -83,7 +83,7 @@ async def activate_user(user: UserActivationRequestSchema, db: AsyncSession = De
         raise HTTPException(status_code=400, detail="User account is already active.")
     elif not token:
         raise HTTPException(status_code=400, detail="Invalid or expired activation token.")
-    elif token.expires_at < datetime.now(timezone.utc):
+    elif token.expires_at < datetime.now():
         raise HTTPException(status_code=400, detail="Invalid or expired activation token.")
     else:
         if user.token == token.token:
@@ -117,7 +117,7 @@ async def password_reset_complete(user: PasswordResetCompleteRequestSchema, db: 
     result = await db.execute(select(PasswordResetTokenModel).where(PasswordResetTokenModel.user_id == db_user.id))
     token = result.scalar_one_or_none()
 
-    if token.expires_at < datetime.now(timezone.utc) or token.token != user.token:
+    if token.expires_at < datetime.now() or token.token != user.token:
         await db.delete(token)
         await db.commit()
 
@@ -187,7 +187,7 @@ async def refresh_token(
         raise HTTPException(status_code=404, detail="User not found.")
 
     token_obj = next((t for t in db_user.refresh_tokens if t.token == user.refresh_token), None)
-    if token_obj.expires_at < datetime.now(timezone.utc):
+    if token_obj.expires_at < datetime.now():
         raise HTTPException(status_code=400, detail="Token has expired.")
 
     new_access_token = jwt_manager.create_access_token({"user_id": db_user.id, "email": db_user.email})
