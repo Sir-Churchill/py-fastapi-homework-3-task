@@ -188,7 +188,7 @@ async def refresh_token(
 
     token_obj = next((t for t in db_user.refresh_tokens if t.token == user.refresh_token), None)
     if token_obj.expires_at < datetime.now():
-        raise HTTPException(status_code=400, detail="Token has expired.")
+        raise HTTPException(status_code=401, detail="Token has expired.")
 
     new_access_token = jwt_manager.create_access_token({"user_id": db_user.id, "email": db_user.email})
 
