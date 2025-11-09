@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy import select, delete
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from config import get_jwt_auth_manager, get_settings, BaseAppSettings
 from database import (
@@ -181,23 +181,62 @@ async def refresh_token(
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid refresh token.")
 
-    db_user = await get_user_by_email(db, payload["email"])
+    # Get user_id from payload (must exist in refresh token)
+    user_id = payload.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid refresh token.")
+
+    # Query user by ID instead of email
+    result = await db.execute(
+        select(UserModel)
+        .options(selectinload(UserModel.refresh_tokens))
+        .where(UserModel.id == user_id)
+    )
+    db_user = result.scalar_one_or_none()
 
     if not db_user or not db_user.is_active:
         raise HTTPException(status_code=404, detail="User not found.")
 
+    # Find the refresh token in the database
     token_obj = next((t for t in db_user.refresh_tokens if t.token == user.refresh_token), None)
-    if token_obj.expires_at < datetime.now():
-        raise HTTPException(status_code=400, detail="Token has expired.")
 
-    new_access_token = jwt_manager.create_access_token({"user_id": db_user.id, "email": db_user.email})
+    if not token_obj:
+        raise HTTPException(status_code=401, detail="Refresh token not found.")
 
-    new_refresh_token = jwt_manager.create_refresh_token({"user_id": db_user.id, "email": db_user.email},
-                                                         expires_delta=timedelta(days=settings.LOGIN_TIME_DAYS))
-    refresh_token_obj = RefreshTokenModel.create(db_user.id, settings.LOGIN_TIME_DAYS, token=new_refresh_token)
+    # Handle timezone-aware comparison
+    token_expiry = token_obj.expires_at
+    if token_expiry.tzinfo is None:
+        token_expiry = token_expiry.replace(tzinfo=timezone.utc)
+
+    if token_expiry < datetime.now(timezone.utc):
+        raise HTTPException(status_code=401, detail="Refresh token has expired.")
+
+    # Create new tokens
+    new_access_token = jwt_manager.create_access_token(
+        {"user_id": db_user.id, "email": db_user.email},
+        expires_delta=timedelta(minutes=60)
+    )
+
+    new_refresh_token = jwt_manager.create_refresh_token(
+        {"user_id": db_user.id, "email": db_user.email},
+        expires_delta=timedelta(days=settings.LOGIN_TIME_DAYS)
+    )
+
+    # Delete old refresh token and create new one
+    await db.delete(token_obj)
+    refresh_token_obj = RefreshTokenModel.create(
+        db_user.id,
+        settings.LOGIN_TIME_DAYS,
+        token=new_refresh_token
+    )
     db.add(refresh_token_obj)
-    await db.commit()
-    await db.refresh(refresh_token_obj)
+
+    try:
+        await db.commit()
+        await db.refresh(refresh_token_obj)
+    except SQLAlchemyError:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Database error occurred.")
 
     return TokenRefreshResponseSchema(
         access_token=new_access_token,
