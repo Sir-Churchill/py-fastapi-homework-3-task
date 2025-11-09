@@ -2,6 +2,8 @@ from datetime import datetime, timezone, timedelta
 from typing import cast
 
 from fastapi import APIRouter, Depends, status, HTTPException
+from jose.exceptions import ExpiredSignatureError
+from requests.models import DecodeError
 from sqlalchemy import select, delete
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -153,7 +155,11 @@ async def login(user: UserLoginRequestSchema, db: AsyncSession = Depends(get_db)
         refresh_token = jwt_manager.create_refresh_token(
             payload, expires_delta=timedelta(days=settings.LOGIN_TIME_DAYS))
 
-        save_refresh_token = RefreshTokenModel.create(user=db_user.id, token=refresh_token)
+        save_refresh_token = RefreshTokenModel.create(
+            user_id=db_user.id,
+            days_valid=settings.LOGIN_TIME_DAYS,
+            token=refresh_token
+        )
 
         db.add(save_refresh_token)
         await db.commit()
@@ -179,7 +185,9 @@ async def refresh_token(
 ):
     try:
         payload = jwt_manager.decode_refresh_token(user.refresh_token)
-    except Exception:
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=400, detail="Token has expired.")
+    except (DecodeError, Exception):
         raise HTTPException(status_code=401, detail="Invalid refresh token.")
 
     user_id = payload.get("user_id")
@@ -223,8 +231,8 @@ async def refresh_token(
 
     await db.delete(token_obj)
     refresh_token_obj = RefreshTokenModel.create(
-        db_user.id,
-        settings.LOGIN_TIME_DAYS,
+        user_id=db_user.id,
+        days_valid=settings.LOGIN_TIME_DAYS,
         token=new_refresh_token
     )
     db.add(refresh_token_obj)
