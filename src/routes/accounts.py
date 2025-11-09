@@ -181,12 +181,10 @@ async def refresh_token(
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid refresh token.")
 
-    # Get user_id from payload (must exist in refresh token)
     user_id = payload.get("user_id")
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid refresh token.")
 
-    # Query user by ID instead of email
     result = await db.execute(
         select(UserModel)
         .options(selectinload(UserModel.refresh_tokens))
@@ -195,23 +193,20 @@ async def refresh_token(
     db_user = result.scalar_one_or_none()
 
     if not db_user or not db_user.is_active:
-        raise HTTPException(status_code=404, detail="User not found.")
+        raise HTTPException(status_code=401, detail="Invalid refresh token.")
 
-    # Find the refresh token in the database
     token_obj = next((t for t in db_user.refresh_tokens if t.token == user.refresh_token), None)
 
     if not token_obj:
         raise HTTPException(status_code=401, detail="Refresh token not found.")
 
-    # Handle timezone-aware comparison
     token_expiry = token_obj.expires_at
     if token_expiry.tzinfo is None:
         token_expiry = token_expiry.replace(tzinfo=timezone.utc)
 
     if token_expiry < datetime.now(timezone.utc):
-        raise HTTPException(status_code=401, detail="Refresh token has expired.")
+        raise HTTPException(status_code=400, detail="Token has expired.")
 
-    # Create new tokens
     new_access_token = jwt_manager.create_access_token(
         {"user_id": db_user.id, "email": db_user.email},
         expires_delta=timedelta(minutes=60)
@@ -222,7 +217,6 @@ async def refresh_token(
         expires_delta=timedelta(days=settings.LOGIN_TIME_DAYS)
     )
 
-    # Delete old refresh token and create new one
     await db.delete(token_obj)
     refresh_token_obj = RefreshTokenModel.create(
         db_user.id,
