@@ -2,8 +2,6 @@ from datetime import datetime, timezone, timedelta
 from typing import cast
 
 from fastapi import APIRouter, Depends, status, HTTPException
-from jose.exceptions import ExpiredSignatureError
-from requests.models import DecodeError
 from sqlalchemy import select, delete
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -183,16 +181,10 @@ async def refresh_token(
         jwt_manager: JWTAuthManagerInterface = Depends(get_jwt_auth_manager),
         settings: BaseAppSettings = Depends(get_settings)
 ):
-    try:
-        payload = jwt_manager.decode_refresh_token(user.refresh_token)
-    except ExpiredSignatureError:
-        raise HTTPException(status_code=400, detail="Token has expired.")
-    except (DecodeError, Exception):
-        raise HTTPException(status_code=401, detail="Invalid refresh token.")
+
+    payload = jwt_manager.decode_refresh_token(user.refresh_token)
 
     user_id = payload.get("user_id")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Invalid refresh token.")
 
     result = await db.execute(
         select(UserModel)
@@ -203,9 +195,6 @@ async def refresh_token(
 
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found.")
-
-    if not db_user.is_active:
-        raise HTTPException(status_code=403, detail="User account is not activated.")
 
     token_obj = next((t for t in db_user.refresh_tokens if t.token == user.refresh_token), None)
 
@@ -231,8 +220,8 @@ async def refresh_token(
 
     await db.delete(token_obj)
     refresh_token_obj = RefreshTokenModel.create(
-        user_id=db_user.id,
-        days_valid=settings.LOGIN_TIME_DAYS,
+        db_user.id,
+        settings.LOGIN_TIME_DAYS,
         token=new_refresh_token
     )
     db.add(refresh_token_obj)
