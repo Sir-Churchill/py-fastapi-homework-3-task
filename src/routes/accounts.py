@@ -116,7 +116,7 @@ async def password_reset_complete(user: PasswordResetCompleteRequestSchema, db: 
     db_user = await get_user_by_email(db, user.email)
 
     if not db_user:
-        raise HTTPException(status_code=404, detail="User not found.")
+        raise HTTPException(status_code=400, detail="User not found.")
 
     if not db_user.is_active:
         raise HTTPException(status_code=400, detail="Invalid email or token.")
@@ -201,10 +201,10 @@ async def refresh_token(
     db_user = result.scalar_one_or_none()
 
     if not db_user:
-        raise HTTPException(status_code=401, detail="Refresh token not found.")
-
-    if not db_user.refresh_tokens:
         raise HTTPException(status_code=404, detail="User not found.")
+
+    elif not db_user.refresh_tokens:
+        raise HTTPException(status_code=401, detail="User not found.")
 
     token_obj = next((t for t in db_user.refresh_tokens if t.token == user.refresh_token), None)
 
