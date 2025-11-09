@@ -134,7 +134,7 @@ async def password_reset_complete(user: PasswordResetCompleteRequestSchema, db: 
     return PasswordResetCompleteResponseSchema()
 
 
-@router.post("/login/", response_model=UserLoginResponseSchema)
+@router.post("/login/", response_model=UserLoginResponseSchema, status_code=201)
 async def login(user: UserLoginRequestSchema, db: AsyncSession = Depends(get_db),
                 jwt_manager: JWTAuthManagerInterface = Depends(get_jwt_auth_manager),
                 settings: BaseAppSettings = Depends(get_settings)
@@ -153,7 +153,7 @@ async def login(user: UserLoginRequestSchema, db: AsyncSession = Depends(get_db)
         refresh_token = jwt_manager.create_refresh_token(
             payload, expires_delta=timedelta(days=settings.LOGIN_TIME_DAYS))
 
-        save_refresh_token = RefreshTokenModel.create(db_user.id, settings.LOGIN_TIME_DAYS, token=refresh_token)
+        save_refresh_token = RefreshTokenModel.create(user=db_user.id, token=refresh_token)
 
         db.add(save_refresh_token)
         await db.commit()
@@ -188,7 +188,7 @@ async def refresh_token(
 
     token_obj = next((t for t in db_user.refresh_tokens if t.token == user.refresh_token), None)
     if token_obj.expires_at < datetime.now():
-        raise HTTPException(status_code=401, detail="Token has expired.")
+        raise HTTPException(status_code=400, detail="Token has expired.")
 
     new_access_token = jwt_manager.create_access_token({"user_id": db_user.id, "email": db_user.email})
 
