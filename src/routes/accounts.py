@@ -164,9 +164,11 @@ async def login(user: UserLoginRequestSchema, db: AsyncSession = Depends(get_db)
             refresh_token=refresh_token,
             type="bearer"
         )
-    except Exception:
+    except Exception as e:
         await db.rollback()
+        print(e)
         raise HTTPException(status_code=500, detail="An error occurred while processing the request.")
+
 
 
 @router.post("/refresh/", response_model=TokenRefreshResponseSchema)
@@ -192,8 +194,11 @@ async def refresh_token(
     )
     db_user = result.scalar_one_or_none()
 
-    if not db_user or not db_user.is_active:
-        raise HTTPException(status_code=401, detail="Invalid refresh token.")
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    if not db_user.is_active:
+        raise HTTPException(status_code=403, detail="User account is not activated.")
 
     token_obj = next((t for t in db_user.refresh_tokens if t.token == user.refresh_token), None)
 
