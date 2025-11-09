@@ -156,7 +156,7 @@ async def login(user: UserLoginRequestSchema, db: AsyncSession = Depends(get_db)
         save_refresh_token = RefreshTokenModel.create(
             user_id=db_user.id,
             days_valid=settings.LOGIN_TIME_DAYS,
-            token=refresh_token
+            token_type=refresh_token
         )
 
         db.add(save_refresh_token)
