@@ -81,7 +81,9 @@ async def activate_user(user: UserActivationRequestSchema, db: AsyncSession = De
 
     get_token = await db.execute(select(ActivationTokenModel).where(ActivationTokenModel.user_id == db_user.id))
     token = get_token.scalar_one_or_none()
-    if db_user.is_active:
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    elif db_user.is_active:
         raise HTTPException(status_code=400, detail="User account is already active.")
     elif not token:
         raise HTTPException(status_code=400, detail="Invalid or expired activation token.")
@@ -113,7 +115,10 @@ async def password_reset_request(user: PasswordResetRequestSchema, db: AsyncSess
 async def password_reset_complete(user: PasswordResetCompleteRequestSchema, db: AsyncSession = Depends(get_db)):
     db_user = await get_user_by_email(db, user.email)
 
-    if not db_user or not db_user.is_active:
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    if not db_user.is_active:
         raise HTTPException(status_code=400, detail="Invalid email or token.")
 
     result = await db.execute(select(PasswordResetTokenModel).where(PasswordResetTokenModel.user_id == db_user.id))
