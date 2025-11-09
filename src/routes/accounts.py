@@ -166,7 +166,7 @@ async def login(user: UserLoginRequestSchema, db: AsyncSession = Depends(get_db)
         return UserLoginResponseSchema(
             access_token=access_token,
             refresh_token=refresh_token,
-            type="bearer"
+            token_type="bearer"
         )
     except Exception as e:
         await db.rollback()
