@@ -131,7 +131,7 @@ async def password_reset_complete(user: PasswordResetCompleteRequestSchema, db: 
         await db.rollback()
         raise HTTPException(status_code=500, detail="An error occurred while resetting the password.")
 
-    return PasswordResetResponseSchema()
+    return PasswordResetCompleteResponseSchema()
 
 
 @router.post("/login/", response_model=UserLoginResponseSchema)
@@ -142,7 +142,7 @@ async def login(user: UserLoginRequestSchema, db: AsyncSession = Depends(get_db)
     db_user = await get_user_by_email(db, user.email)
 
     if not db_user or not db_user.verify_password(user.password):
-        raise HTTPException(status_code=401, detail="Invalid email or token.")
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
 
     if not db_user.is_active:
         raise HTTPException(status_code=403, detail="User account is not activated.")
