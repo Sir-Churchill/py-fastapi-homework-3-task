@@ -195,13 +195,16 @@ async def refresh_token(
     )
     db_user = result.scalar_one_or_none()
 
-    token_obj = next((t for t in db_user.refresh_tokens if t.token == user.refresh_token), None)
-
-    if not token_obj:
+    if not user.refresh_token:
         raise HTTPException(status_code=401, detail="Refresh token not found.")
+
+    token_obj = next((t for t in db_user.refresh_tokens if t.token == user.refresh_token), None)
 
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found.")
+
+    if not token_obj:
+        raise HTTPException(status_code=401, detail="Refresh token not found.")
 
     token_expiry = token_obj.expires_at
     if token_expiry.tzinfo is None:
