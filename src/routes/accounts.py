@@ -29,6 +29,8 @@ from schemas.accounts import (
     UserLoginResponseSchema, TokenRefreshResponseSchema, TokenRefreshRequestSchema
 )
 
+from exceptions.security import TokenExpiredError
+
 router = APIRouter()
 
 
@@ -168,9 +170,8 @@ async def login(user: UserLoginRequestSchema, db: AsyncSession = Depends(get_db)
             refresh_token=refresh_token,
             token_type="bearer"
         )
-    except Exception as e:
+    except Exception:
         await db.rollback()
-        print(e)
         raise HTTPException(status_code=500, detail="An error occurred while processing the request.")
 
 
@@ -181,9 +182,10 @@ async def refresh_token(
         jwt_manager: JWTAuthManagerInterface = Depends(get_jwt_auth_manager),
         settings: BaseAppSettings = Depends(get_settings)
 ):
-
-    payload = jwt_manager.decode_refresh_token(user.refresh_token)
-
+    try:
+        payload = jwt_manager.decode_refresh_token(user.refresh_token)
+    except TokenExpiredError:
+        raise HTTPException(status_code=400, detail="Token has expired.")
     user_id = payload.get("user_id")
 
     result = await db.execute(
@@ -229,8 +231,9 @@ async def refresh_token(
     try:
         await db.commit()
         await db.refresh(refresh_token_obj)
-    except SQLAlchemyError:
+    except SQLAlchemyError as e:
         await db.rollback()
+        print(e)
         raise HTTPException(status_code=500, detail="Database error occurred.")
 
     return TokenRefreshResponseSchema(
