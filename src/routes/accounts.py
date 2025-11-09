@@ -170,7 +170,6 @@ async def login(user: UserLoginRequestSchema, db: AsyncSession = Depends(get_db)
         raise HTTPException(status_code=500, detail="An error occurred while processing the request.")
 
 
-
 @router.post("/refresh/", response_model=TokenRefreshResponseSchema)
 async def refresh_token(
         user: TokenRefreshRequestSchema,
