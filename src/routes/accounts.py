@@ -198,7 +198,7 @@ async def refresh_token(
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found.")
 
-    if db_user.refresh_tokens is None:
+    if not db_user.refresh_tokens:
         raise HTTPException(status_code=401, detail="Refresh token not found.")
 
     token_obj = next((t for t in db_user.refresh_tokens if t.token == user.refresh_token), None)
