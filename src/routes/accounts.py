@@ -220,7 +220,9 @@ async def refresh_token(
         expires_delta=timedelta(days=settings.LOGIN_TIME_DAYS)
     )
 
-    await db.delete(token_obj)
+    await db.execute(delete(RefreshTokenModel).where(RefreshTokenModel.user_id == db_user.id))
+    await db.commit()
+
     refresh_token_obj = RefreshTokenModel.create(
         db_user.id,
         settings.LOGIN_TIME_DAYS,
